@@ -5,7 +5,13 @@ import SwiftUI
 /// scrolls away (then a jump-back button appears).
 struct LiveTranscriptView: View {
     let store: LiveTranscriptStore
+    /// Bump when the surrounding layout resizes the scroll container (tray
+    /// open/close). During the grace that follows, geometry churn can't
+    /// unpin — only the user scrolling away can, once geometry has settled
+    /// near the bottom again.
+    var layoutEpoch = 0
     @State private var pinned = true
+    @State private var settlingAfterRelayout = false
 
     private static let bottomID = "bottom"
 
@@ -34,13 +40,23 @@ struct LiveTranscriptView: View {
                 geometry.contentOffset.y + geometry.containerSize.height
                     >= geometry.contentSize.height - 40
             } action: { _, nearBottom in
-                pinned = nearBottom
+                if settlingAfterRelayout {
+                    if nearBottom { settlingAfterRelayout = false }
+                } else {
+                    pinned = nearBottom
+                }
             }
             .onChange(of: store.utterances.count) {
                 if pinned { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
             }
             .onChange(of: store.partials) {
                 if pinned { proxy.scrollTo(Self.bottomID, anchor: .bottom) }
+            }
+            .onChange(of: layoutEpoch) {
+                if pinned {
+                    settlingAfterRelayout = true
+                    proxy.scrollTo(Self.bottomID, anchor: .bottom)
+                }
             }
             .overlay(alignment: .bottomTrailing) {
                 if !pinned {
