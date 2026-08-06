@@ -28,8 +28,6 @@ final class LiveTranscriptWindowController {
         panel.setFrameAutosaveName("quill.live-transcript")
     }
 
-    var isVisible: Bool { panel.isVisible }
-
     /// orderFrontRegardless: the app is .accessory and must not activate.
     /// Pass trayExpanded to open directly onto the settings tray ("Open
     /// config") or collapsed ("Show live transcript"); nil leaves it as
@@ -40,6 +38,4 @@ final class LiveTranscriptWindowController {
         }
         panel.orderFrontRegardless()
     }
-
-    func close() { panel.orderOut(nil) }
 }

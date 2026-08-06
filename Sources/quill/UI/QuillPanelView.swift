@@ -30,7 +30,7 @@ struct QuillPanelView: View {
                 Image(systemName: "waveform")
                     .font(.title2)
                     .foregroundStyle(.tertiary)
-                Text("not recording")
+                Text(model.recording ? "recording — live transcript off" : "not recording")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }

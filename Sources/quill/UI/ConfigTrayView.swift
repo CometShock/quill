@@ -21,6 +21,14 @@ struct ConfigTrayView: View {
         "parakeet-eou-160ms", "parakeet-eou-320ms", "parakeet-eou-1280ms",
     ]
 
+    /// The known engines plus, if the config file has a hand-edited value
+    /// we don't recognize, that value appended so the Picker always has a
+    /// matching selection. We never rewrite it ourselves — only a deliberate
+    /// user selection through the Picker writes to config.
+    private var engineOptions: [String] {
+        Self.engines.contains(engine) ? Self.engines : Self.engines + [engine]
+    }
+
     var body: some View {
         if malformed {
             malformedWarning
@@ -54,7 +62,7 @@ struct ConfigTrayView: View {
                     save(autoOpen, ["live_transcript", "auto_open"])
                 }
             Picker("Live engine", selection: $engine) {
-                ForEach(Self.engines, id: \.self) { Text($0) }
+                ForEach(engineOptions, id: \.self) { Text($0) }
             }
             .onChange(of: engine) {
                 save(engine, ["live_transcript", "engine"])
@@ -90,6 +98,20 @@ struct ConfigTrayView: View {
         .toggleStyle(.switch)
         .controlSize(.small)
         .padding(12)
+        .onDisappear { saveUnsubmittedTextFields() }
+    }
+
+    /// Text fields only save via onSubmit (Return). If the tray closes or
+    /// focus moves elsewhere first, that edit would otherwise be silently
+    /// discarded while the UI still shows it as if it were saved — so flush
+    /// any edits that differ from what's on disk when the tray goes away.
+    private func saveUnsubmittedTextFields() {
+        if recordingsDir != (Config.recordingsDir()?.path ?? "") {
+            save(recordingsDir, ["recordings_dir"])
+        }
+        if onStop != (Config.onStop() ?? "") {
+            save(onStop, ["on_stop"])
+        }
     }
 
     private func save(_ value: Any, _ keyPath: [String]) {

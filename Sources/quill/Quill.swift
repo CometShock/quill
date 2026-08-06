@@ -43,7 +43,7 @@ struct Run: ParsableCommand {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let controller = AppController(root: root)
+        let controller = AppController(root: root, cliOverride: out)
 
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         sigint.setEventHandler {
@@ -78,7 +78,7 @@ struct Doctor: ParsableCommand {
 /// ticker. All state transitions happen on the main actor.
 @MainActor
 final class AppController {
-    private let root: URL
+    private let cliOverride: String?
     private let menuBar = MenuBarController()
     private let transcription = TranscriptionCoordinator()
     private var session: RecordingSession?
@@ -88,8 +88,13 @@ final class AppController {
     private let panelModel = PanelModel()
     private let liveWindow: LiveTranscriptWindowController
 
-    init(root: URL) {
-        self.root = root
+    /// Recomputed on every use so tray edits to recordings_dir take effect
+    /// on the next recording without a relaunch. CLI --out still wins over
+    /// config every time (Config.resolveRoot's precedence).
+    private var currentRoot: URL { Config.resolveRoot(cliOverride: cliOverride) }
+
+    init(root: URL, cliOverride: String?) {
+        self.cliOverride = cliOverride
         liveWindow = LiveTranscriptWindowController(model: panelModel)
         panelModel.onToggleRecording = { [weak self] in self?.toggle() }
         menuBar.onToggle = { [weak self] in self?.toggle() }
@@ -125,7 +130,7 @@ final class AppController {
 
     private func startSession() {
         do {
-            let newSession = try RecordingSession(root: root)
+            let newSession = try RecordingSession(root: currentRoot)
             attachLiveTranscript(to: newSession)
             try newSession.start()
             session = newSession
@@ -235,8 +240,8 @@ final class AppController {
     }
 
     private func openFolder() {
-        try? FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(root)
+        try? FileManager.default.createDirectory(at: currentRoot, withIntermediateDirectories: true)
+        NSWorkspace.shared.open(currentRoot)
     }
 
     private static func format(_ interval: TimeInterval) -> String {
