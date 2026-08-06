@@ -21,6 +21,7 @@ enum DoctorReport {
             checkSystemAudio(),
             checkRecordingsRoot(recordingsRoot),
             checkTranscription(),
+            checkLiveTranscript(),
         ]
     }
 
@@ -94,6 +95,33 @@ enum DoctorReport {
             name: "transcription",
             status: .warn("parakeet models not downloaded (~600 MB)"),
             remediation: "downloads automatically on first transcription — record a short test session while online"
+        )
+    }
+
+    /// Same promise as the transcription check: never discover missing
+    /// models mid-meeting. Streaming models live in FluidAudio's Application
+    /// Support cache; presence of the encoder is the "downloaded" signal.
+    static func checkLiveTranscript() -> Check {
+        guard Config.liveTranscriptEnabled() else {
+            return Check(
+                name: "live transcript",
+                status: .warn("disabled in config"),
+                remediation: nil
+            )
+        }
+        let variant = LiveTranscriber.resolveVariant(Config.liveTranscriptEngine())
+        let modelDir = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("FluidAudio/Models/parakeet-eou-streaming", isDirectory: true)
+            .appendingPathComponent(variant.repo.folderName, isDirectory: true)
+        let encoder = modelDir.appendingPathComponent("streaming_encoder.mlmodelc")
+        if FileManager.default.fileExists(atPath: encoder.path) {
+            return Check(name: "live transcript", status: .ok, remediation: nil)
+        }
+        return Check(
+            name: "live transcript",
+            status: .warn("streaming models not downloaded"),
+            remediation: "downloads automatically when a recording starts while online"
         )
     }
 

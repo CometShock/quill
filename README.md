@@ -68,6 +68,22 @@ on next launch (the filesystem is the queue: a session with `meta.json` but no
 The engine sits behind a small protocol; a Whisper engine (WhisperKit
 large-v3-turbo) is planned as the fallback / re-transcription option.
 
+## Live transcript
+
+While recording, quill can show a floating, always-on-top panel with a live
+speaker-tagged transcript — glance at it when you missed or misheard
+something. Open it from the menu (**Show live transcript**), or set
+`auto_open` to have it appear whenever recording starts.
+
+The live text is a rough tier: it comes from a small streaming model
+(Parakeet EOU 120M, one instance per track) and is never written to disk.
+The accurate transcript is still produced after the meeting by the offline
+pass. Streaming models (~100 MB) download once on first use; `quill doctor`
+reports whether they're cached.
+
+Disable with `"live_transcript": { "enabled": false }` to skip the streaming
+engines entirely.
+
 ## Config
 
 Optional, at `~/.config/quill/config.json`:
@@ -76,6 +92,7 @@ Optional, at `~/.config/quill/config.json`:
 {
   "recordings_dir": "~/Recordings",
   "transcription": { "enabled": true, "engine": "parakeet" },
+  "live_transcript": { "enabled": true, "auto_open": false, "engine": "parakeet-eou-320ms" },
   "on_stop": "my-hook"
 }
 ```
