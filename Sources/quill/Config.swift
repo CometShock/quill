@@ -14,9 +14,25 @@ import Foundation
 /// ~/Recordings. `on_stop` is a shell command spawned with the session
 /// directory as its argument — after the transcript is written, or right
 /// after recording when transcription is disabled.
+enum ConfigWriteError: Error, CustomStringConvertible {
+    case malformed
+
+    var description: String {
+        "config file is not valid JSON — fix or delete \(Config.path.path)"
+    }
+}
+
 enum Config {
-    static let path = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".config/quill/config.json")
+    /// Test seam: unit tests point this at a temp file; production never
+    /// sets it. A stored `let` would bake the real home path into every
+    /// read, making the write API untestable without touching ~/.config.
+    nonisolated(unsafe) static var pathOverride: URL?
+
+    static var path: URL {
+        pathOverride
+            ?? FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".config/quill/config.json")
+    }
 
     static let defaultRoot = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent("Recordings", isDirectory: true)
@@ -96,6 +112,58 @@ enum Config {
             return nil
         }
         return json
+    }
+
+    /// True when a config file exists but can't be parsed. The settings
+    /// tray checks this to switch into its read-only warning state.
+    static func fileIsMalformed() -> Bool {
+        guard FileManager.default.fileExists(atPath: path.path) else { return false }
+        guard
+            let data = try? Data(contentsOf: path),
+            (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] != nil
+        else { return true }
+        return false
+    }
+
+    /// Set one value at a key path (creating intermediate objects), keeping
+    /// every other key byte-preserved-in-spirit: the whole file is
+    /// re-serialized, but unknown keys and values survive untouched. Never
+    /// writes over a file it couldn't parse — user-owned config beats
+    /// convenience.
+    static func setValue(_ value: Any, forKeyPath keys: [String]) throws {
+        precondition(!keys.isEmpty)
+        var root: [String: Any] = [:]
+        if FileManager.default.fileExists(atPath: path.path) {
+            guard
+                let data = try? Data(contentsOf: path),
+                let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+            else { throw ConfigWriteError.malformed }
+            root = parsed
+        }
+        root = Self.setting(root, keys: ArraySlice(keys), value: value)
+        try FileManager.default.createDirectory(
+            at: path.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        let data = try JSONSerialization.data(
+            withJSONObject: root, options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(to: path, options: .atomic)
+    }
+
+    /// Functional nested-dictionary set: JSONSerialization gives plain
+    /// dictionaries, so mutation has to rebuild each level.
+    private static func setting(
+        _ dict: [String: Any], keys: ArraySlice<String>, value: Any
+    ) -> [String: Any] {
+        var dict = dict
+        let key = keys.first!
+        if keys.count == 1 {
+            dict[key] = value
+        } else {
+            let child = dict[key] as? [String: Any] ?? [:]
+            dict[key] = setting(child, keys: keys.dropFirst(), value: value)
+        }
+        return dict
     }
 
     /// Resolve the recordings root from an optional CLI override.
