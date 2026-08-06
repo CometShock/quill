@@ -37,6 +37,10 @@ actor LiveTranscriber {
     private var consumers: [Task<Void, Never>] = []
     private var reportedDrop = false
 
+    /// Last progress text shown, to drop no-op updates: the handler fires on
+    /// an arbitrary queue far more often than the text changes.
+    private var lastLoadProgressText: String?
+
     init(variant: StreamingModelVariant, store: LiveTranscriptStore) {
         self.variant = variant
         self.store = store
@@ -105,12 +109,34 @@ actor LiveTranscriber {
         consumers = []
     }
 
+    /// The panel notice for a model-load progress snapshot. Kept phase- and
+    /// count-granular (no percentages) so the text — and therefore the UI —
+    /// only changes when something meaningful happens.
+    static func loadProgressText(_ progress: DownloadProgress) -> String {
+        switch progress.phase {
+        case .listing:
+            return "checking speech model…"
+        case .downloading(let completed, let total):
+            return "downloading speech model (\(completed)/\(total)) — recording is unaffected"
+        case .compiling:
+            return "preparing speech model — recording is unaffected; live text starts when ready"
+        }
+    }
+
     // MARK: -
 
     private func run(track: Track, stream: AsyncStream<AudioChunk>) async {
         let engine = variant.createManager()
         do {
-            try await engine.loadModels()
+            if track == .mic, let eouEngine = engine as? StreamingEouAsrManager {
+                try await eouEngine.loadModels(progressHandler: { [weak self] progress in
+                    guard let self else { return }
+                    Task { await self.reportLoadProgress(Self.loadProgressText(progress)) }
+                })
+                await clearLoadProgress()
+            } else {
+                try await engine.loadModels()
+            }
         } catch {
             FileHandle.standardError.write(Data(
                 "live: \(track.speaker) model load failed: \(error)\n".utf8
@@ -166,6 +192,20 @@ actor LiveTranscriber {
             settlers[track]!.update(fullText: fullText, at: now)
         }
         await store.setPartial(speaker: track.speaker, text: settlers[track]!.partial)
+    }
+
+    private func reportLoadProgress(_ text: String) async {
+        guard text != lastLoadProgressText else { return }
+        lastLoadProgressText = text
+        await store.setNotice(text)
+    }
+
+    /// Load finished: clear our progress notice (and only ours — if we never
+    /// reported, another notice may own the slot).
+    private func clearLoadProgress() async {
+        guard lastLoadProgressText != nil else { return }
+        lastLoadProgressText = nil
+        await store.setNotice(nil)
     }
 
     /// Queue overflowed — the engines can't keep up. Live text will have a
