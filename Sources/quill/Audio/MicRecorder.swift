@@ -35,6 +35,11 @@ final class MicRecorder: @unchecked Sendable {
     /// used to offset-align the two tracks' transcript timestamps.
     private(set) var firstBufferAt: Date?
 
+    /// Optional live consumer of captured buffers, called on the render
+    /// thread after each disk write. The buffer is only valid during the
+    /// call — copy before escaping. Set before start().
+    var bufferHandler: ((AVAudioPCMBuffer) -> Void)?
+
     // Liveness check state (voice-processing path only). Written from the tap
     // callback, read on main when deciding to fall back.
     private var livenessFrames = 0
@@ -177,6 +182,7 @@ final class MicRecorder: @unchecked Sendable {
             } catch {
                 FileHandle.standardError.write(Data("mic track write failed: \(error)\n".utf8))
             }
+            self.bufferHandler?(buffer)
         }
     }
 
@@ -203,6 +209,7 @@ final class MicRecorder: @unchecked Sendable {
             } catch {
                 FileHandle.standardError.write(Data("mic track write failed: \(error)\n".utf8))
             }
+            self.bufferHandler?(mono)
         }
     }
 

@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 /// One meeting recording: a timestamped folder holding two independent tracks
@@ -30,6 +31,17 @@ final class RecordingSession {
         }
         try FileManager.default.createDirectory(at: candidate, withIntermediateDirectories: true)
         dir = candidate
+    }
+
+    /// Route a live copy of each track's buffers to a consumer (the live
+    /// transcriber). Call before start(). Handlers run on capture threads
+    /// and must return fast — copy, enqueue, nothing else.
+    func setBufferHandlers(
+        mic micHandler: ((AVAudioPCMBuffer) -> Void)?,
+        system systemHandler: ((AVAudioPCMBuffer) -> Void)?
+    ) {
+        mic.bufferHandler = micHandler
+        system.bufferHandler = systemHandler
     }
 
     /// Start both tracks. If the mic fails after the system tap started, the
