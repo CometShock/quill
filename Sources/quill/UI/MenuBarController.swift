@@ -15,6 +15,7 @@ final class MenuBarController {
     var onOpenFolder: (() -> Void)?
     var onQuit: (() -> Void)?
     var onShowLiveTranscript: (() -> Void)?
+    var onOpenConfig: (() -> Void)?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -45,9 +46,15 @@ final class MenuBarController {
             action: #selector(liveTranscriptClicked),
             keyEquivalent: "t"
         )
-        liveTranscriptItem.isEnabled = false
-        liveTranscriptItem.isHidden = !Config.liveTranscriptEnabled()
+        liveTranscriptItem.isEnabled = true
         menu.addItem(liveTranscriptItem)
+
+        let openConfig = NSMenuItem(
+            title: "Open config",
+            action: #selector(openConfigClicked),
+            keyEquivalent: ","
+        )
+        menu.addItem(openConfig)
 
         let openFolder = NSMenuItem(
             title: "Open recordings folder",
@@ -65,7 +72,7 @@ final class MenuBarController {
         )
         menu.addItem(quit)
 
-        for item in [toggleItem, liveTranscriptItem, openFolder, quit] {
+        for item in [toggleItem, liveTranscriptItem, openConfig, openFolder, quit] {
             item.target = self
         }
 
@@ -87,7 +94,6 @@ final class MenuBarController {
         stateLabel.title = recording ? "● recording · \(elapsed ?? "0:00")" : "idle"
         toggleItem.title = recording ? "Stop recording" : "Start recording"
         statusItem.button?.contentTintColor = recording ? .systemRed : nil
-        liveTranscriptItem.isEnabled = recording
     }
 
     /// Show transcription progress/failure as a second status line in the
@@ -124,4 +130,5 @@ final class MenuBarController {
     @objc private func openFolderClicked() { onOpenFolder?() }
     @objc private func quitClicked() { onQuit?() }
     @objc private func liveTranscriptClicked() { onShowLiveTranscript?() }
+    @objc private func openConfigClicked() { onOpenConfig?() }
 }

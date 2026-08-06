@@ -85,14 +85,18 @@ final class AppController {
     private var ticker: Timer?
     private var liveStore: LiveTranscriptStore?
     private var liveTranscriber: LiveTranscriber?
-    private var liveWindow: LiveTranscriptWindowController?
+    private let panelModel = PanelModel()
+    private let liveWindow: LiveTranscriptWindowController
 
     init(root: URL) {
         self.root = root
+        liveWindow = LiveTranscriptWindowController(model: panelModel)
+        panelModel.onToggleRecording = { [weak self] in self?.toggle() }
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
-        menuBar.onShowLiveTranscript = { [weak self] in self?.liveWindow?.show() }
+        menuBar.onShowLiveTranscript = { [weak self] in self?.liveWindow.show(trayExpanded: false) }
+        menuBar.onOpenConfig = { [weak self] in self?.liveWindow.show(trayExpanded: true) }
         menuBar.update(recording: false, elapsed: nil)
 
         Task { [transcription, root] in
@@ -134,23 +138,23 @@ final class AppController {
         }
 
         menuBar.update(recording: true, elapsed: "0:00")
+        panelModel.setRecording(true, elapsed: "0:00")
         ticker = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.tick() }
         }
     }
 
     /// Build the live pipeline for this session: a fresh store, a fresh
-    /// transcriber, buffer routing, and the panel per auto_open. Each
-    /// session gets its own store (never reused/reset) so a still-flushing
-    /// previous transcriber can never land stale text or notices into the
-    /// new session's panel — see detachLiveTranscript. The panel frame
-    /// position persists across the new NSPanel via setFrameAutosaveName,
-    /// so recreating the window controller doesn't lose placement.
+    /// transcriber, buffer routing. Each session gets its own store (never
+    /// reused/reset) so a still-flushing previous transcriber can never
+    /// land stale text or notices into the new session's panel — see
+    /// detachLiveTranscript. The persistent panel follows the new store
+    /// through the model.
     private func attachLiveTranscript(to newSession: RecordingSession) {
-        guard Config.liveTranscriptEnabled() else { return }
-        liveWindow?.releaseFrameAutosave()
-        liveWindow?.close()
-        liveWindow = nil
+        guard Config.liveTranscriptEnabled() else {
+            panelModel.setSession(store: nil)
+            return
+        }
         let store = LiveTranscriptStore()
         liveStore = store
         let variant = LiveTranscriber.resolveVariant(Config.liveTranscriptEngine())
@@ -161,9 +165,9 @@ final class AppController {
             system: { transcriber.ingest($0, track: .system) }
         )
         Task { await transcriber.start() }
-        liveWindow = LiveTranscriptWindowController(store: store)
+        panelModel.setSession(store: store)
         if Config.liveTranscriptAutoOpen() {
-            liveWindow?.show()
+            liveWindow.show()
         }
     }
 
@@ -184,16 +188,12 @@ final class AppController {
     /// streams (and may have loaded engines / kicked off a model download);
     /// without this they'd park forever, leaking the actor and its engines.
     /// stop() finishes the continuations so those loops exit and clean up.
-    /// No "recording ended" notice here (unlike detachLiveTranscript) —
-    /// no session ever ran.
     private func abortLiveTranscript() {
         if let transcriber = liveTranscriber {
             liveTranscriber = nil
             Task { await transcriber.stop() }
         }
-        liveWindow?.releaseFrameAutosave()
-        liveWindow?.close()
-        liveWindow = nil
+        panelModel.setSession(store: nil)
     }
 
     private func stopSession() {
@@ -207,6 +207,7 @@ final class AppController {
         ticker?.invalidate()
         ticker = nil
         menuBar.update(recording: false, elapsed: nil)
+        panelModel.setRecording(false, elapsed: nil)
         detachLiveTranscript(sessionName: session.dir.lastPathComponent)
 
         let dir = session.dir
@@ -228,10 +229,9 @@ final class AppController {
 
     private func tick() {
         guard let session else { return }
-        menuBar.update(
-            recording: true,
-            elapsed: Self.format(Date().timeIntervalSince(session.startedAt))
-        )
+        let elapsed = Self.format(Date().timeIntervalSince(session.startedAt))
+        menuBar.update(recording: true, elapsed: elapsed)
+        panelModel.setRecording(true, elapsed: elapsed)
     }
 
     private func openFolder() {
