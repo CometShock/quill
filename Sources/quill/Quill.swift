@@ -138,14 +138,17 @@ final class AppController {
         }
     }
 
-    /// Build the live pipeline for this session: shared store (reset), a
-    /// fresh transcriber, buffer routing, and the panel per auto_open. The
-    /// previous session's panel closes — its content was reset anyway.
+    /// Build the live pipeline for this session: a fresh store, a fresh
+    /// transcriber, buffer routing, and the panel per auto_open. Each
+    /// session gets its own store (never reused/reset) so a still-flushing
+    /// previous transcriber can never land stale text or notices into the
+    /// new session's panel — see detachLiveTranscript. The panel frame
+    /// position persists across the new NSPanel via setFrameAutosaveName,
+    /// so recreating the window controller doesn't lose placement.
     private func attachLiveTranscript(to newSession: RecordingSession) {
         guard Config.liveTranscriptEnabled() else { return }
         liveWindow?.close()
-        let store = liveStore ?? LiveTranscriptStore()
-        store.reset()
+        let store = LiveTranscriptStore()
         liveStore = store
         let variant = LiveTranscriber.resolveVariant(Config.liveTranscriptEngine())
         let transcriber = LiveTranscriber(variant: variant, store: store)
@@ -155,9 +158,7 @@ final class AppController {
             system: { transcriber.ingest($0, track: .system) }
         )
         Task { await transcriber.start() }
-        if liveWindow == nil {
-            liveWindow = LiveTranscriptWindowController(store: store)
-        }
+        liveWindow = LiveTranscriptWindowController(store: store)
         if Config.liveTranscriptAutoOpen() {
             liveWindow?.show()
         }
