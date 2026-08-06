@@ -83,12 +83,16 @@ final class AppController {
     private let transcription = TranscriptionCoordinator()
     private var session: RecordingSession?
     private var ticker: Timer?
+    private var liveStore: LiveTranscriptStore?
+    private var liveTranscriber: LiveTranscriber?
+    private var liveWindow: LiveTranscriptWindowController?
 
     init(root: URL) {
         self.root = root
         menuBar.onToggle = { [weak self] in self?.toggle() }
         menuBar.onOpenFolder = { [weak self] in self?.openFolder() }
         menuBar.onQuit = { [weak self] in self?.shutdown() }
+        menuBar.onShowLiveTranscript = { [weak self] in self?.liveWindow?.show() }
         menuBar.update(recording: false, elapsed: nil)
 
         Task { [transcription, root] in
@@ -118,6 +122,7 @@ final class AppController {
     private func startSession() {
         do {
             let newSession = try RecordingSession(root: root)
+            attachLiveTranscript(to: newSession)
             try newSession.start()
             session = newSession
             FileHandle.standardError.write(Data("● recording → \(newSession.dir.path)\n".utf8))
@@ -133,6 +138,43 @@ final class AppController {
         }
     }
 
+    /// Build the live pipeline for this session: shared store (reset), a
+    /// fresh transcriber, buffer routing, and the panel per auto_open. The
+    /// previous session's panel closes — its content was reset anyway.
+    private func attachLiveTranscript(to newSession: RecordingSession) {
+        guard Config.liveTranscriptEnabled() else { return }
+        liveWindow?.close()
+        let store = liveStore ?? LiveTranscriptStore()
+        store.reset()
+        liveStore = store
+        let variant = LiveTranscriber.resolveVariant(Config.liveTranscriptEngine())
+        let transcriber = LiveTranscriber(variant: variant, store: store)
+        liveTranscriber = transcriber
+        newSession.setBufferHandlers(
+            mic: { transcriber.ingest($0, track: .mic) },
+            system: { transcriber.ingest($0, track: .system) }
+        )
+        Task { await transcriber.start() }
+        if liveWindow == nil {
+            liveWindow = LiveTranscriptWindowController(store: store)
+        }
+        if Config.liveTranscriptAutoOpen() {
+            liveWindow?.show()
+        }
+    }
+
+    /// Flush and release the live pipeline; leave the final text + a notice
+    /// in the store so the panel stays useful until the next recording.
+    private func detachLiveTranscript(sessionName: String) {
+        guard let transcriber = liveTranscriber else { return }
+        liveTranscriber = nil
+        let store = liveStore
+        Task {
+            await transcriber.stop()
+            store?.setNotice("recording ended — full transcript will land in \(sessionName)")
+        }
+    }
+
     private func stopSession() {
         guard let session else { return }
         session.stop()
@@ -144,6 +186,7 @@ final class AppController {
         ticker?.invalidate()
         ticker = nil
         menuBar.update(recording: false, elapsed: nil)
+        detachLiveTranscript(sessionName: session.dir.lastPathComponent)
 
         let dir = session.dir
         Task { [transcription] in await transcription.enqueue(dir) }

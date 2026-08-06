@@ -9,10 +9,12 @@ final class MenuBarController {
     private let stateLabel: NSMenuItem
     private let transcriptionLabel: NSMenuItem
     private let toggleItem: NSMenuItem
+    private let liveTranscriptItem: NSMenuItem
 
     var onToggle: (() -> Void)?
     var onOpenFolder: (() -> Void)?
     var onQuit: (() -> Void)?
+    var onShowLiveTranscript: (() -> Void)?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -38,6 +40,15 @@ final class MenuBarController {
         )
         menu.addItem(toggleItem)
 
+        liveTranscriptItem = NSMenuItem(
+            title: "Show live transcript",
+            action: #selector(liveTranscriptClicked),
+            keyEquivalent: "t"
+        )
+        liveTranscriptItem.isEnabled = false
+        liveTranscriptItem.isHidden = !Config.liveTranscriptEnabled()
+        menu.addItem(liveTranscriptItem)
+
         let openFolder = NSMenuItem(
             title: "Open recordings folder",
             action: #selector(openFolderClicked),
@@ -54,7 +65,7 @@ final class MenuBarController {
         )
         menu.addItem(quit)
 
-        for item in [toggleItem, openFolder, quit] {
+        for item in [toggleItem, liveTranscriptItem, openFolder, quit] {
             item.target = self
         }
 
@@ -76,6 +87,7 @@ final class MenuBarController {
         stateLabel.title = recording ? "● recording · \(elapsed ?? "0:00")" : "idle"
         toggleItem.title = recording ? "Stop recording" : "Start recording"
         statusItem.button?.contentTintColor = recording ? .systemRed : nil
+        liveTranscriptItem.isEnabled = recording
     }
 
     /// Show transcription progress/failure as a second status line in the
@@ -111,4 +123,5 @@ final class MenuBarController {
     @objc private func toggleClicked() { onToggle?() }
     @objc private func openFolderClicked() { onOpenFolder?() }
     @objc private func quitClicked() { onQuit?() }
+    @objc private func liveTranscriptClicked() { onShowLiveTranscript?() }
 }
