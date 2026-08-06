@@ -75,6 +75,11 @@ speaker-tagged transcript — glance at it when you missed or misheard
 something. Open it from the menu (**Show live transcript**), or set
 `auto_open` to have it appear whenever recording starts.
 
+The window is also quill's control surface: a record/stop button at the
+bottom, and a settings gear that slides up a config tray — every option in
+`config.json` editable in place (unknown keys in the file are preserved).
+**Open config** in the menu bar opens straight to it.
+
 The live text is a rough tier: it comes from a small streaming model
 (Parakeet EOU 120M, one instance per track) and is never written to disk.
 The accurate transcript is still produced after the meeting by the offline
