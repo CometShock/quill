@@ -127,6 +127,7 @@ final class AppController {
             session = newSession
             FileHandle.standardError.write(Data("● recording → \(newSession.dir.path)\n".utf8))
         } catch {
+            abortLiveTranscript()
             FileHandle.standardError.write(Data("recording start failed: \(error)\n".utf8))
             notifyUser(title: "quill — recording failed", body: "\(error)")
             return
@@ -147,7 +148,9 @@ final class AppController {
     /// so recreating the window controller doesn't lose placement.
     private func attachLiveTranscript(to newSession: RecordingSession) {
         guard Config.liveTranscriptEnabled() else { return }
+        liveWindow?.releaseFrameAutosave()
         liveWindow?.close()
+        liveWindow = nil
         let store = LiveTranscriptStore()
         liveStore = store
         let variant = LiveTranscriber.resolveVariant(Config.liveTranscriptEngine())
@@ -174,6 +177,23 @@ final class AppController {
             await transcriber.stop()
             store?.setNotice("recording ended — full transcript will land in \(sessionName)")
         }
+    }
+
+    /// Undo a partial attachLiveTranscript() after `newSession.start()`
+    /// throws. The transcriber's consumer Tasks are already parked on live
+    /// streams (and may have loaded engines / kicked off a model download);
+    /// without this they'd park forever, leaking the actor and its engines.
+    /// stop() finishes the continuations so those loops exit and clean up.
+    /// No "recording ended" notice here (unlike detachLiveTranscript) —
+    /// no session ever ran.
+    private func abortLiveTranscript() {
+        if let transcriber = liveTranscriber {
+            liveTranscriber = nil
+            Task { await transcriber.stop() }
+        }
+        liveWindow?.releaseFrameAutosave()
+        liveWindow?.close()
+        liveWindow = nil
     }
 
     private func stopSession() {

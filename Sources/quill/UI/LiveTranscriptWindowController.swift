@@ -31,4 +31,13 @@ final class LiveTranscriptWindowController {
     func show() { panel.orderFrontRegardless() }
 
     func close() { panel.orderOut(nil) }
+
+    /// Unregisters this panel's frame autosave name. NSWindow's autosave
+    /// registry is keyed by name and rejects a second window claiming a
+    /// name still held by a live (even if closed/off-screen) window — and
+    /// because `panel` is an NSPanel, dropping our last Swift reference
+    /// doesn't guarantee synchronous ObjC dealloc. Calling this before
+    /// releasing the controller deterministically frees the name so the
+    /// next session's panel can claim it and its frame will persist.
+    func releaseFrameAutosave() { panel.setFrameAutosaveName("") }
 }
