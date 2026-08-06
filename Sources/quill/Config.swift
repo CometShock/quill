@@ -5,6 +5,7 @@ import Foundation
 ///     {
 ///       "recordings_dir": "~/Recordings",
 ///       "transcription": { "enabled": true, "engine": "parakeet" },
+///       "live_transcript": { "enabled": true, "auto_open": false, "engine": "parakeet-eou-320ms" },
 ///       "mic_voice_processing": true,
 ///       "on_stop": "my-hook"
 ///     }
@@ -55,6 +56,29 @@ enum Config {
     /// recording meetings through the speakers.
     static func micVoiceProcessing() -> Bool {
         load()?["mic_voice_processing"] as? Bool ?? false
+    }
+
+    /// Whether the live transcript runs during recording. Default on; off
+    /// skips streaming-engine creation entirely and hides the menu item.
+    static func liveTranscriptEnabled() -> Bool {
+        liveTranscript()?["enabled"] as? Bool ?? true
+    }
+
+    /// Whether the live transcript panel opens itself when recording starts
+    /// (default off — open on demand from the menu). Transcription runs
+    /// either way; the panel only toggles visibility.
+    static func liveTranscriptAutoOpen() -> Bool {
+        liveTranscript()?["auto_open"] as? Bool ?? false
+    }
+
+    /// Configured streaming engine variant. Only the parakeet-eou-* variants
+    /// are supported; LiveTranscriber warns and falls back for anything else.
+    static func liveTranscriptEngine() -> String {
+        liveTranscript()?["engine"] as? String ?? "parakeet-eou-320ms"
+    }
+
+    private static func liveTranscript() -> [String: Any]? {
+        load()?["live_transcript"] as? [String: Any]
     }
 
     /// Parse the config file. A malformed config is reported on stderr rather
