@@ -11,6 +11,14 @@ struct LiveTranscriptView: View {
     /// near the bottom again.
     var layoutEpoch = 0
     @State private var pinned = true
+    /// True from a layoutEpoch bump until geometry reports near-bottom again.
+    /// Must be cleared by a *continuously-varying* observed value (distance
+    /// from bottom), not a collapsed Bool: onScrollGeometryChange only fires
+    /// on a change in the transformed value, and the epoch-triggered
+    /// programmatic scroll keeps a Bool "near bottom" transform at a
+    /// constant true throughout the resize — no transition, no callback,
+    /// flag stuck forever. A future refactor back to `for: Bool.self` would
+    /// silently reintroduce that bug.
     @State private var settlingAfterRelayout = false
 
     private static let bottomID = "bottom"
@@ -36,10 +44,10 @@ struct LiveTranscriptView: View {
                 }
                 .padding(10)
             }
-            .onScrollGeometryChange(for: Bool.self) { geometry in
-                geometry.contentOffset.y + geometry.containerSize.height
-                    >= geometry.contentSize.height - 40
-            } action: { _, nearBottom in
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentSize.height - geometry.contentOffset.y - geometry.containerSize.height
+            } action: { _, distanceFromBottom in
+                let nearBottom = distanceFromBottom <= 40
                 if settlingAfterRelayout {
                     if nearBottom { settlingAfterRelayout = false }
                 } else {
