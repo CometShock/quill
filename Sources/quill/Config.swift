@@ -6,6 +6,7 @@ import Foundation
 ///       "recordings_dir": "~/Recordings",
 ///       "transcription": { "enabled": true, "engine": "parakeet" },
 ///       "live_transcript": { "enabled": true, "auto_open": false, "engine": "parakeet-eou-320ms" },
+///       "update_check": { "enabled": false, "repo": "CometShock/quill", "branch": "live-transcript" },
 ///       "mic_voice_processing": true,
 ///       "on_stop": "my-hook"
 ///     }
@@ -95,6 +96,26 @@ enum Config {
 
     private static func liveTranscript() -> [String: Any]? {
         load()?["live_transcript"] as? [String: Any]
+    }
+
+    /// Whether quill checks GitHub for updates once at launch. Default off
+    /// — with this false, quill makes no network requests unless the user
+    /// clicks "Check for updates" (the README's nothing-leaves-the-machine
+    /// promise stays literal).
+    static func updateCheckEnabled() -> Bool {
+        updateCheck()?["enabled"] as? Bool ?? false
+    }
+
+    static func updateCheckRepo() -> String {
+        updateCheck()?["repo"] as? String ?? UpdateChecker.defaultRepo
+    }
+
+    static func updateCheckBranch() -> String {
+        updateCheck()?["branch"] as? String ?? UpdateChecker.defaultBranch
+    }
+
+    private static func updateCheck() -> [String: Any]? {
+        load()?["update_check"] as? [String: Any]
     }
 
     /// Parse the config file. A malformed config is reported on stderr rather

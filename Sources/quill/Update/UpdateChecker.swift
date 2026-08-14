@@ -75,6 +75,77 @@ actor UpdateChecker {
         }
         return .upToDate
     }
+
+    private let repo: String
+    private let branch: String
+    private let stateFile: URL
+
+    init(repo: String, branch: String) {
+        self.repo = repo
+        self.branch = branch
+        stateFile = FileManager.default
+            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("quill/update-check.json")
+    }
+
+    enum FetchError: Error {
+        case badResponse
+    }
+
+    /// One full check: branch head (always), parent + compare (forks
+    /// only). Every failure collapses to .failed — an update checker must
+    /// never be louder than its news. Records the seen head on success so
+    /// the next check compares against it.
+    func check() async -> UpdateStatus {
+        do {
+            guard
+                let headSHA = Self.parseBranchHead(
+                    try await get("https://api.github.com/repos/\(repo)/branches/\(branch)"))
+            else { return .failed }
+
+            guard let info = Self.parseRepo(
+                try await get("https://api.github.com/repos/\(repo)"))
+            else { return .failed }
+
+            var behindBy: Int?
+            var rebaseURL: URL?
+            if let parent = info.parentFullName, let parentBranch = info.parentDefaultBranch {
+                let owner = repo.split(separator: "/").first.map(String.init) ?? repo
+                guard let compare = Self.parseCompare(
+                    try await get(
+                        "https://api.github.com/repos/\(parent)/compare/\(parentBranch)...\(owner):\(branch)"
+                    ))
+                else { return .failed }
+                behindBy = compare.behindBy
+                rebaseURL = compare.htmlURL
+            }
+
+            let lastSeen = UpdateCheckState.loadLastSeen(from: stateFile)
+            UpdateCheckState.saveLastSeen(headSHA, to: stateFile)
+            let movedURL = URL(
+                string: "https://github.com/\(repo)/compare/\(lastSeen ?? headSHA)...\(branch)")!
+            return Self.derive(
+                behindBy: behindBy, rebaseURL: rebaseURL,
+                headSHA: headSHA, lastSeenSHA: lastSeen, movedURL: movedURL
+            )
+        } catch {
+            return .failed
+        }
+    }
+
+    /// GitHub requires a User-Agent; anything non-200 (404, rate limit)
+    /// is a plain failure — no retries, next check is next launch/click.
+    private func get(_ urlString: String) async throws -> Data {
+        guard let url = URL(string: urlString) else { throw FetchError.badResponse }
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("quill-update-check", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+            throw FetchError.badResponse
+        }
+        return data
+    }
 }
 
 /// Last-seen branch head, persisted as a tiny JSON file in Application
