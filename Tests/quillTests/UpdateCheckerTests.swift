@@ -43,10 +43,22 @@ struct UpdateCheckerTests {
         #expect(UpdateChecker.parseRepo(Data("not json".utf8)) == nil)
     }
 
+    @Test func garbageCompareJSONIsNil() {
+        #expect(UpdateChecker.parseCompare(Data("not json".utf8)) == nil)
+    }
+
+    @Test func garbageBranchJSONIsNil() {
+        #expect(UpdateChecker.parseBranchHead(Data("not json".utf8)) == nil)
+    }
+
     @Test func parsesCompareBehindAndURL() {
         let parsed = UpdateChecker.parseCompare(Self.compareBehindJSON)
         #expect(parsed?.behindBy == 3)
         #expect(parsed?.htmlURL == rebaseURL)
+    }
+
+    @Test func parsesCompareCurrentAsZeroBehind() {
+        #expect(UpdateChecker.parseCompare(Self.compareCurrentJSON)?.behindBy == 0)
     }
 
     @Test func parsesBranchHeadSHA() {
