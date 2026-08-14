@@ -14,6 +14,7 @@ struct ConfigTrayView: View {
     @State private var micVoiceProcessing = Config.micVoiceProcessing()
     @State private var recordingsDir = Config.recordingsDir()?.path ?? ""
     @State private var onStop = Config.onStop() ?? ""
+    @State private var updateCheckEnabled = Config.updateCheckEnabled()
     @State private var writeError: String?
     @State private var malformed = Config.fileIsMalformed()
 
@@ -74,6 +75,10 @@ struct ConfigTrayView: View {
             Toggle("Mic voice processing (echo cancel)", isOn: $micVoiceProcessing)
                 .onChange(of: micVoiceProcessing) {
                     save(micVoiceProcessing, ["mic_voice_processing"])
+                }
+            Toggle("Check for updates at launch", isOn: $updateCheckEnabled)
+                .onChange(of: updateCheckEnabled) {
+                    save(updateCheckEnabled, ["update_check", "enabled"])
                 }
             HStack {
                 TextField("Recordings folder", text: $recordingsDir, prompt: Text("~/Recordings"))

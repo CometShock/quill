@@ -89,6 +89,18 @@ reports whether they're cached.
 Disable with `"live_transcript": { "enabled": false }` to skip the streaming
 engines entirely.
 
+## Update check
+
+The menu's **Check for updates** asks GitHub whether the branch this build
+came from has moved (and, for fork builds, whether upstream has commits
+the branch lacks — time to rebase). Results show as a clickable status
+line in the menu that opens the GitHub compare page. Nothing downloads;
+it's purely advisory.
+
+Off by default — quill makes no network requests unless you click the
+menu item or opt into a once-per-launch check with
+`"update_check": { "enabled": true }`.
+
 ## Config
 
 Optional, at `~/.config/quill/config.json`:

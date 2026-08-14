@@ -8,6 +8,7 @@ final class MenuBarController {
     private let statusItem: NSStatusItem
     private let stateLabel: NSMenuItem
     private let transcriptionLabel: NSMenuItem
+    private let updateLabel: NSMenuItem
     private let toggleItem: NSMenuItem
     private let liveTranscriptItem: NSMenuItem
 
@@ -16,6 +17,8 @@ final class MenuBarController {
     var onQuit: (() -> Void)?
     var onShowLiveTranscript: (() -> Void)?
     var onOpenConfig: (() -> Void)?
+    var onCheckForUpdates: (() -> Void)?
+    var onUpdateStatusClick: (() -> Void)?
 
     init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -31,6 +34,13 @@ final class MenuBarController {
         transcriptionLabel.isEnabled = false
         transcriptionLabel.isHidden = true
         menu.addItem(transcriptionLabel)
+
+        updateLabel = NSMenuItem(
+            title: "", action: #selector(updateStatusClicked), keyEquivalent: ""
+        )
+        updateLabel.isEnabled = false
+        updateLabel.isHidden = true
+        menu.addItem(updateLabel)
 
         menu.addItem(.separator())
 
@@ -56,6 +66,13 @@ final class MenuBarController {
         )
         menu.addItem(openConfig)
 
+        let checkUpdates = NSMenuItem(
+            title: "Check for updates",
+            action: #selector(checkUpdatesClicked),
+            keyEquivalent: ""
+        )
+        menu.addItem(checkUpdates)
+
         let openFolder = NSMenuItem(
             title: "Open recordings folder",
             action: #selector(openFolderClicked),
@@ -72,7 +89,7 @@ final class MenuBarController {
         )
         menu.addItem(quit)
 
-        for item in [toggleItem, liveTranscriptItem, openConfig, openFolder, quit] {
+        for item in [updateLabel, toggleItem, liveTranscriptItem, openConfig, checkUpdates, openFolder, quit] {
             item.target = self
         }
 
@@ -104,6 +121,15 @@ final class MenuBarController {
         transcriptionLabel.isHidden = text == nil
     }
 
+    /// Update-check status line, third slot in the status block; nil
+    /// hides it. Clickable when there's a compare page to open (rebase /
+    /// branch-moved results); plain text otherwise ("up to date").
+    func updateUpdateCheck(_ text: String?, clickable: Bool) {
+        updateLabel.title = text ?? ""
+        updateLabel.isHidden = text == nil
+        updateLabel.isEnabled = clickable
+    }
+
     // Inlined Lucide feather SVG. Keeping it in source means the executable
     // has no separate resource bundle to install alongside it — true
     // single-binary.
@@ -131,4 +157,6 @@ final class MenuBarController {
     @objc private func quitClicked() { onQuit?() }
     @objc private func liveTranscriptClicked() { onShowLiveTranscript?() }
     @objc private func openConfigClicked() { onOpenConfig?() }
+    @objc private func checkUpdatesClicked() { onCheckForUpdates?() }
+    @objc private func updateStatusClicked() { onUpdateStatusClick?() }
 }

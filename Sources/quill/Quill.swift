@@ -87,6 +87,7 @@ final class AppController {
     private var liveTranscriber: LiveTranscriber?
     private let panelModel = PanelModel()
     private let liveWindow: LiveTranscriptWindowController
+    private var updateCompareURL: URL?
 
     /// Recomputed on every use so tray edits to recordings_dir take effect
     /// on the next recording without a relaunch. CLI --out still wins over
@@ -102,6 +103,13 @@ final class AppController {
         menuBar.onQuit = { [weak self] in self?.shutdown() }
         menuBar.onShowLiveTranscript = { [weak self] in self?.liveWindow.show(trayExpanded: false) }
         menuBar.onOpenConfig = { [weak self] in self?.liveWindow.show(trayExpanded: true) }
+        menuBar.onCheckForUpdates = { [weak self] in self?.runUpdateCheck(manual: true) }
+        menuBar.onUpdateStatusClick = { [weak self] in
+            if let url = self?.updateCompareURL { NSWorkspace.shared.open(url) }
+        }
+        if Config.updateCheckEnabled() {
+            runUpdateCheck(manual: false)
+        }
         menuBar.update(recording: false, elapsed: nil)
 
         Task { [transcription, root] in
@@ -242,6 +250,43 @@ final class AppController {
     private func openFolder() {
         try? FileManager.default.createDirectory(at: currentRoot, withIntermediateDirectories: true)
         NSWorkspace.shared.open(currentRoot)
+    }
+
+    /// One shot per trigger: build a fresh checker from current config
+    /// (so tray edits to repo/branch apply immediately) and render the
+    /// result. Background (launch) checks stay quiet unless there's news;
+    /// manual clicks always answer, including "up to date" and failure.
+    private func runUpdateCheck(manual: Bool) {
+        menuBar.updateUpdateCheck(manual ? "checking for updates…" : nil, clickable: false)
+        let checker = UpdateChecker(
+            repo: Config.updateCheckRepo(), branch: Config.updateCheckBranch()
+        )
+        Task { [weak self] in
+            let status = await checker.check()
+            self?.showUpdateStatus(status, manual: manual)
+        }
+    }
+
+    private func showUpdateStatus(_ status: UpdateStatus, manual: Bool) {
+        switch status {
+        case .upToDate:
+            updateCompareURL = nil
+            menuBar.updateUpdateCheck(manual ? "up to date" : nil, clickable: false)
+        case .rebaseNeeded(let count, let url):
+            updateCompareURL = url
+            menuBar.updateUpdateCheck(
+                "upstream +\(count) commit\(count == 1 ? "" : "s") — rebase needed",
+                clickable: true
+            )
+        case .branchMoved(let url):
+            updateCompareURL = url
+            menuBar.updateUpdateCheck("branch updated since last check", clickable: true)
+        case .failed:
+            updateCompareURL = nil
+            menuBar.updateUpdateCheck(
+                manual ? "update check failed — offline?" : nil, clickable: false
+            )
+        }
     }
 
     private static func format(_ interval: TimeInterval) -> String {
